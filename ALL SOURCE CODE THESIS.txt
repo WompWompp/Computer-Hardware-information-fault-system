@@ -1,0 +1,406 @@
+//// most accured error 
+
+<?php
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "computerfaults";
+
+// Create connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// SQL query to get computer with the most common error and related information
+$sql = "
+    SELECT
+        ComputerID,
+        MostCommonError,
+        TotalErrors,
+        LatestErrorDate,
+        ShortestTimeDifference
+    FROM (
+        SELECT
+            ComputerID,
+            FaultType AS MostCommonError,
+            COUNT(*) AS TotalErrors,
+            MAX(ReportDate) AS LatestErrorDate,
+            MIN(DATEDIFF(ReportDate, LagReportDate)) AS ShortestTimeDifference
+        FROM (
+            SELECT
+                ComputerID,
+                FaultType,
+                ReportDate,
+                LAG(ReportDate) OVER (PARTITION BY ComputerID ORDER BY ReportDate) AS LagReportDate
+            FROM FaultReport
+        ) AS Subquery
+        GROUP BY ComputerID, FaultType
+        ORDER BY TotalErrors DESC
+    ) AS Subquery
+    GROUP BY ComputerID
+    ORDER BY TotalErrors DESC, ShortestTimeDifference ASC
+    LIMIT 1
+";
+
+$result = $conn->query($sql);
+
+if ($result->num_rows > 0) {
+    echo "<table border='1'><tr><th>ComputerID</th><th>MostCommonError</th><th>TotalErrors</th><th>LatestErrorDate</th><th>ShortestTimeDifference</th></tr>";
+    while ($row = $result->fetch_assoc()) {
+        echo "<tr><td>" . $row["ComputerID"] . "</td><td>" . $row["MostCommonError"] . "</td><td>" . $row["TotalErrors"] . "</td><td>" . $row["LatestErrorDate"] . "</td><td>" . $row["ShortestTimeDifference"] . "</td></tr>";
+    }
+    echo "</table>";
+} else {
+    echo "0 results";
+}
+
+// Close the connection
+$conn->close();
+?>
+
+
+//// Computer statistics 
+
+
+<?php
+
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "computerfaults";
+
+// Create a connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check the connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// SQL query to retrieve data for chart
+$sql = "SELECT Model, COUNT(*) as Count FROM computer GROUP BY Model";
+$result = $conn->query($sql);
+
+// Prepare data for Chart.js
+$labels = [];
+$data = [];
+if ($result->num_rows > 0) {
+    while($row = $result->fetch_assoc()) {
+        $labels[] = $row['Model'];
+        $data[] = $row['Count'];
+    }
+} else {
+    echo "0 results";
+}
+
+// Close the connection
+$conn->close();
+
+// Data for Chart.js
+$chartData = [
+    'labels' => $labels,
+    'datasets' => [
+        [
+            'label' => 'Computers by Model',
+            'data' => $data,
+            'backgroundColor' => [
+                'rgba(255, 99, 132, 0.2)',
+                'rgba(54, 162, 235, 0.2)',
+                'rgba(255, 206, 86, 0.2)'
+            ],
+            'borderColor' => [
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 206, 86, 1)'
+            ],
+            'borderWidth' => 1
+        ]
+    ]
+];
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computer Statistics</title>
+    <!-- Add Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h4>Computer Statistics</h4> <!-- Changed from h2 to h4 for smaller title -->
+
+    <!-- Add a canvas for the chart -->
+    <canvas id="computerChart" width="400" height="200"></canvas>
+
+    <script>
+        // Get data from PHP
+        var data = <?php echo json_encode($chartData); ?>;
+
+        // Create a chart using Chart.js
+        var ctx = document.getElementById('computerChart').getContext('2d');
+        var myChart = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+//// Fault types 
+
+
+<?php
+
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "computerfaults";
+
+// Create a connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check the connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// SQL query to get fault types, their counts, the computer with the most errors, and days between errors
+$sql = "
+    SELECT
+        FaultType,
+        COUNT(*) AS FaultTypeCount,
+        MAX(ComputerWithMostErrors) AS ComputerWithMostErrors,
+        DATEDIFF(MAX(ErrorDate), MIN(ErrorDate)) AS DaysBetweenErrors
+    FROM (
+        SELECT
+            FaultType,
+            COUNT(*) AS FaultTypeCount,
+            ComputerID AS ComputerWithMostErrors,
+            MIN(ReportDate) AS ErrorDate
+        FROM FaultReport
+        GROUP BY FaultType, ComputerID
+    ) AS Subquery
+    GROUP BY FaultType
+";
+
+$result = $conn->query($sql);
+
+// Display the results on the webpage
+echo "<h5>Fault Types, Counts, Computer with Most Errors, and Days Between Errors</h5>";
+echo "<table border='1'>";
+echo "<tr><th>Fault Type</th><th>Count</th><th>Computer with Most Errors</th><th>Days Between Errors</th></tr>";
+
+while ($row = $result->fetch_assoc()) {
+    echo "<tr>";
+    echo "<td>{$row['FaultType']}</td>";
+    echo "<td>{$row['FaultTypeCount']}</td>";
+    echo "<td>{$row['ComputerWithMostErrors']}</td>";
+    echo "<td>{$row['DaysBetweenErrors']}</td>";
+    echo "</tr>";
+}
+
+echo "</table>";
+
+// Close the database connection
+$conn->close();
+?>
+
+
+//// Pie chart
+
+<?php
+// Database credentials
+$host = 'localhost';
+$db   = 'computerfaults';
+$user = 'root';
+$pass = '';
+
+try {
+    // Establish a connection to the database
+    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
+    // Prepare the SQL query
+    $stmt = $pdo->query("SELECT Description, COUNT(*) as Count FROM faultreport GROUP BY Description");
+    // Fetch the results
+    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (\PDOException $e) {
+    // Handle the exception
+    die("Database connection failed: " . $e->getMessage());
+}
+
+// Sum all counts for scaling the pie chart
+$total_counts = array_sum(array_column($results, 'Count'));
+
+// Generate the pie chart
+$width = 1000; // Width of the image
+$height = 750; // Height of the image
+$image = imagecreatetruecolor($width, $height);
+
+// Allocate colors
+$white = imagecolorallocate($image, 255, 255, 255);
+$black = imagecolorallocate($image, 0, 0, 0);
+// Fill the background with white
+imagefilledrectangle($image, 0, 0, $width, $height, $white);
+
+// Draw the pie chart
+$start_angle = 0;
+$radius = 300; // Radius of the pie chart
+$centerX = $radius + 10; // X coordinate of the center of the pie chart
+$centerY = $height / 2; // Y coordinate of the center of the pie chart
+
+// Generate unique colors for each description
+$colors = [];
+foreach ($results as $index => $row) {
+    $colors[$index] = imagecolorallocate($image, rand(0, 255), rand(0, 255), rand(0, 255));
+}
+
+foreach ($results as $index => $row) {
+    $angle = $row['Count'] * 360 / $total_counts;
+    $end_angle = $start_angle + $angle;
+    // Draw the arc
+    imagefilledarc($image, $centerX, $centerY, $radius * 2, $radius * 2, $start_angle, $end_angle, $colors[$index], IMG_ARC_PIE);
+    $start_angle = $end_angle;
+}
+
+// Draw the legend
+$x = $radius * 2 + 20; // X coordinate to start drawing the legend
+$y = 10; // Y coordinate to start drawing the legend
+$legend_square_size = 20; // Size of the color square in the legend
+
+foreach ($results as $index => $row) {
+    // Draw a square with the color
+    imagefilledrectangle($image, $x, $y, $x + $legend_square_size, $y + $legend_square_size, $colors[$index]);
+    // Draw the description text
+    imagestring($image, 3, $x + $legend_square_size + 5, $y, $row['Description'], $black);
+    $y += $legend_square_size + 5;
+}
+
+// Set the content-type
+header('Content-Type: image/png');
+
+// Output the image
+imagepng($image);
+
+// Free up memory
+imagedestroy($image);
+?>
+
+
+
+//// Error display
+
+
+<?php
+// Check if the form has been submitted and the computer ID is valid
+if (isset($_POST['computer_id']) && is_numeric($_POST['computer_id'])) {
+    $computerId = $_POST['computer_id'];
+
+    // Database credentials
+    $host = 'localhost';
+    $db   = 'computerfaults';
+    $user = 'root';
+    $pass = '';
+
+    try {
+        // Establish a connection to the database
+        $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
+
+        // Prepare and execute the query to fetch faults for the given ComputerID
+        $stmt = $pdo->prepare("SELECT * FROM faultreport WHERE ComputerID = ?");
+        $stmt->execute([$computerId]);
+
+        // Fetch the results
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Check if we have results
+        if ($results) {
+            echo '<table border="1">';
+            echo '<tr>';
+            echo '<th>Report ID</th>';
+            echo '<th>Report Date</th>';
+            echo '<th>Status</th>';
+            echo '<th>Fault Type</th>';
+            echo '<th>Description</th>';
+            echo '</tr>';
+
+            // Iterate over the results and output each row
+            foreach ($results as $row) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($row['ReportID']) . '</td>';
+                echo '<td>' . htmlspecialchars($row['ReportDate']) . '</td>';
+                echo '<td>' . htmlspecialchars($row['Status']) . '</td>';
+                echo '<td>' . htmlspecialchars($row['FaultType']) . '</td>';
+                echo '<td>' . htmlspecialchars($row['Description']) . '</td>';
+                echo '</tr>';
+            }
+            echo '</table>';
+        } else {
+            echo 'No fault reports found for Computer ID: ' . htmlspecialchars($computerId);
+        }
+    } catch (\PDOException $e) {
+        // Handle the exception
+        echo "Database connection failed: " . $e->getMessage();
+    }
+} else {
+    // If the form hasn't been submitted yet, display the form.
+    echo '<form method="post" action="">';
+    echo 'Enter Computer ID: <input type="text" name="computer_id">';
+    echo '<input type="submit" value="Get Fault Reports">';
+    echo '</form>';
+}
+
+
+
+///// Future prediction 
+
+
+
+<?php
+// Database credentials
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "computerfaults";
+
+try {
+    // Create a new PDO connection
+    $conn = new PDO("mysql:host=$servername;dbname=$dbname;charset=utf8", $username, $password);
+    // Set the PDO error mode to exception
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // SQL query to count the occurrences of each fault type
+    $sql = "SELECT FaultType, COUNT(*) AS Frequency FROM faultreport GROUP BY FaultType ORDER BY Frequency DESC LIMIT 1";
+
+    // Prepare and execute the query
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+
+    // Get the result
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($result) {
+       
+    echo "The next error will possibly be caused by \"" . $result['FaultType'] . "\", which has the highest occurrence in the records.";
+} else {
+    echo "No fault types found in the records.";
+}
+} catch (PDOException $e) {
+echo "Error: " . $e->getMessage();
+}
+
+// Close the connection
+$conn = null;
+?>
+
