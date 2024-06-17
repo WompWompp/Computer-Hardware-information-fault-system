@@ -21,14 +21,14 @@ def generate_description(fault_type):
     return random.choice(descriptions[fault_type])
 
 # Set the range of computer IDs
-computer_ids = list(range(51, 71))
+computer_ids = list(range(51, 1001))
 
 # Set the range of dates
 start_date = datetime(2010, 1, 1)
 end_date = datetime(2023, 1, 1)
 
 # Number of records to generate
-num_records = 100
+num_records = 1000
 
 # Generate random data and print in SQL insert format
 for _ in range(num_records):
